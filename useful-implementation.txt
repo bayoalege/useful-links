@@ -1,0 +1,7 @@
+AWSConfig Implementation - https://www.linkedin.com/pulse/aws-infrastructure-compliance-audit-system-config-jegede-oluwatosin-b4u6f%3FtrackingId=kdNKhfIk%252FVjQjKcA78JEeQ%253D%253D/?trackingId=kdNKhfIk%2FVjQjKcA78JEeQ%3D%3D
+
+AWS Migration including ECS, Fargate (serverless), and EKS and they leverage ECR: https://www.linkedin.com/pulse/migrating-legacy-systems-docker-containers-aws-jegede-oluwatosin-w2sgf/
+
+AWS Security Hub Pattern: https://www.linkedin.com/pulse/case-study-addressing-real-world-security-challenge-aws-oluwatosin/
+
+Argocd & EKS - Deployment
