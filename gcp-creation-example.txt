@@ -1,0 +1,139 @@
+GCP Creation Steps:
+Step 1: Initialize gcloud
+gcloud init
+Bayo's Google Credentials token: 4/0AfJohXln9aByudLVpZUtjoUjlK2YaLNqK1P9i69ZywzcwfzDAjgxRWUcG69R25ydsv53qQ
+ 
+Step 2: Create VM Instances
+# Create VM instance hackajob-vm-1
+gcloud compute instances create hackajob-vm-1 --machine-type=f1-micro --image-family=ubuntu-2004-lts --image-project=ubuntu-os-cloud --zone=us-west4-c
+
+# Create VM instance hackajob-vm-2
+gcloud compute instances create hackajob-vm-2 --machine-type=f1-micro --image-family=ubuntu-2004-lts --image-project=ubuntu-os-cloud --zone=us-west4-c
+
+Step 3: Create Load Balancer - health-check, backend-services, target-http-proxies, url-map, and forwarding-rules
+# Create a health check
+gcloud compute health-checks create http hackajob-health-check --port=80
+
+# Create a backend service
+gcloud compute backend-services create hackajob-backend-service --protocol=HTTP --health-checks=hackajob-health-check --global
+
+# Create a URL map
+gcloud compute url-maps create hackajob-url-map --default-service=hackajob-backend-service
+
+# Create a target HTTP proxy
+gcloud compute target-http-proxies create hackajob-http-proxy --url-map=hackajob-url-map
+
+# Create a global forwarding rule with the correct name
+gcloud compute forwarding-rules create hackajob-lb--global --target-http-proxy=hackajob-http-proxy --ports=80
+
+
+GCP Creation Validation steps:
+bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute health-checks list
+NAME: hackajob-health-check
+REGION: 
+PROTOCOL: HTTP
+
+bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute backend-services list; gcloud compute backend-services describe hackajob-backend-service --global
+NAME: hackajob-backend-service
+BACKENDS: us-west4-c/instanceGroups/hackajob-vm-1,us-west4-c/instanceGroups/hackajob-vm-2
+PROTOCOL: HTTP
+
+bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute url-maps list; gcloud compute url-maps describe hackajob-url-map --global
+NAME: hackajob-url-map
+DEFAULT_SERVICE: backendServices/hackajob-backend-service
+
+bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute target-http-proxies list
+NAME: hackajob-http-proxy
+URL_MAP: hackajob-url-map
+
+
+bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute target-http-proxies describe hackajob-http-proxy --global
+creationTimestamp: '2024-02-03T10:40:27.701-08:00'
+fingerprint: X5l32t11Xjo=
+id: '4905245756347332212'
+kind: compute#targetHttpProxy
+name: hackajob-http-proxy
+selfLink: https://www.googleapis.com/compute/v1/projects/gentle-voltage-413217/global/targetHttpProxies/hackajob-http-proxy
+urlMap: https://www.googleapis.com/compute/v1/projects/gentle-voltage-413217/global/urlMaps/hackajob-url-map
+
+
+bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute forwarding-rules hackajob=lb
+NAME: hackajob-lb
+REGION: 
+IP_ADDRESS: 34.36.32.21
+IP_PROTOCOL: TCP
+TARGET: hackajob-http-proxy
+bayo_alege@cloudshell:~ (gentle-voltage-413217)$ 
+
+bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute forwarding-rules describe hackajob-lb --global
+IPAddress: 34.36.32.21
+IPProtocol: TCP
+creationTimestamp: '2024-02-03T11:08:41.936-08:00'
+description: ''
+fingerprint: Go57xqATnRA=
+id: '3843769362512294358'
+kind: compute#forwardingRule
+labelFingerprint: 42WmSpB8rSM=
+loadBalancingScheme: EXTERNAL
+name: hackajob-lb
+networkTier: PREMIUM
+portRange: 80-80
+selfLink: https://www.googleapis.com/compute/v1/projects/gentle-voltage-413217/global/forwardingRules/hackajob-lb
+target: https://www.googleapis.com/compute/v1/projects/gentle-voltage-413217/global/targetHttpProxies/hackajob-http-proxy
+bayo_alege@cloudshell:~ (gentle-voltage-413217)$ 
+
+GCP Clean up steps
+Step 1: Delete Load Balancer - health-check, backend-services, target-http-proxies, url-map, and forwarding-rules
+
+# Delete a global forwarding rule with the correct name
+gcloud compute forwarding-rules delete hackajob-lb --global
+
+# Delete a target HTTP proxy
+gcloud compute target-http-proxies delete hackajob-http-proxy --global
+
+# Delete a URL map
+gcloud compute url-maps delete hackajob-url-map --global
+
+# Delete a backend service
+gcloud compute backend-services delete hackajob-backend-service --global
+
+# Delete a health check
+gcloud compute health-checks delete hackajob-health-check --global
+
+Step 2:  VM Instances
+# Create VM instance hackajob-vm-1
+gcloud compute instances delete hackajob-vm-1 --zone=us-west4-c
+
+# Create VM instance hackajob-vm-2
+gcloud compute instances delete hackajob-vm-2 --zone=us-west4-c
+
+Optionally delete the instance-groups,
+gcloud compute instance-groups managed delete hackajob-vm-1 --zone=us-west4-c --quiet
+gcloud compute instance-groups managed delete hackajob-vm-2 --zone=us-west4-c --quiet
+gcloud compute instance-groups list
+
+gcloud compute instance-templates delete  hackajob-vm-template
+
+ gcloud compute instance-templates list
+ gcloud compute instances list
+
+
+1. To create instance using instance template:
+gcloud compute instance-templates create hackajob-vm-template --machine-type=f1-micro --image-project=ubuntu-os-cloud --tags=http-server --zone=us-west4-c
+gcloud compute instance-templates describe hackajob-vm-template
+
+To create named instance with template:
+gcloud compute instances create hackajob-vm-1 --source-instance-template=hackajob-vm-template --zone=us-west4-c
+gcloud compute instances create hackajob-vm-2 --source-instance-template=hackajob-vm-template --zone=us-west4-c
+
+To creat instance group from template:
+1. gcloud compute instance-groups managed create hackajob-vm-group --base-instance-name=hackajob-vm --size=2 --template=hackajob-vm-template --zone=us-west4-c
+2. gcloud compute instance-groups managed set-autoscaling hackajob-vm-group --max-num-replicas=5 --target-cpu-utilization=50 --cool-down-period=60
+
+
+or create directly without using instance template:
+1. gcloud compute instances create hackajob-vm-1 --machine-type=f1-micro --image-family=ubuntu-2004-lts --image-project=ubuntu-os-cloud --zone=us-west4-c
+2. gcloud compute instances create hackajob-vm-2 --machine-type=f1-micro --image-family=ubuntu-2004-lts --image-project=ubuntu-os-cloud --zone=us-west4-c
+
+
+gcloud compute operations list - to see all operations on gcloud compute node
