@@ -1,0 +1,157 @@
+1. See regions and create instance group:
+az account list-locations --output table
+az group create --name hackajob-resourceGrp --location eastus2
+
+2. Create two new instances:
+
+root@0ab720271628:~# az vm create --resource-group hackajob-resourceGrp --name hackajob-vm-1 --image Ubuntu2204 --size Standard_DS1_v2 --location eastus2 --admin-username azureuser --generate-ssh-keys
+/opt/az/lib/python3.10/site-packages/paramiko/transport.py:236: CryptographyDeprecationWarning: Blowfish has been deprecated
+  "class": algorithms.Blowfish,
+SSH key files '/root/.ssh/id_rsa' and '/root/.ssh/id_rsa.pub' have been generated under ~/.ssh to allow SSH access to the VM. If using machines without permanent storage, back up your keys to a safe location.
+Starting Build 2023 event, "az vm/vmss create" command will deploy Trusted Launch VM by default. To know more about Trusted Launch, please visit https://docs.microsoft.com/en-us/azure/virtual-machines/trusted-launch
+It is recommended to use parameter "--public-ip-sku Standard" to create new VM with Standard public IP. Please note that the default public IP used for VM creation will be changed from Basic to Standard in the future.
+{
+  "fqdns": "",
+  "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Compute/virtualMachines/hackajob-vm-1",
+  "location": "eastus2",
+  "macAddress": "00-22-48-51-98-65",
+  "powerState": "VM running",
+  "privateIpAddress": "10.0.0.4",
+  "publicIpAddress": "172.200.108.211",
+  "resourceGroup": "hackajob-resourceGrp",
+  "zones": ""
+}
+root@0ab720271628:~# 
+
+
+root@0ab720271628:~# az vm create --resource-group hackajob-resourceGrp --name hackajob-vm-2 --image Ubuntu2204 --size Standard_DS1_v2 --location eastus2 --admin-username azureuser --generate-ssh-keys
+Starting Build 2023 event, "az vm/vmss create" command will deploy Trusted Launch VM by default. To know more about Trusted Launch, please visit https://docs.microsoft.com/en-us/azure/virtual-machines/trusted-launch
+It is recommended to use parameter "--public-ip-sku Standard" to create new VM with Standard public IP. Please note that the default public IP used for VM creation will be changed from Basic to Standard in the future.
+{
+  "fqdns": "",
+  "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Compute/virtualMachines/hackajob-vm-2",
+  "location": "eastus2",
+  "macAddress": "00-0D-3A-7C-0E-D0",
+  "powerState": "VM running",
+  "privateIpAddress": "10.0.0.5",
+  "publicIpAddress": "20.7.74.132",
+  "resourceGroup": "hackajob-resourceGrp",
+  "zones": ""
+}
+root@0ab720271628:~# 
+
+3.
+
+root@0ab720271628:~# az network lb create --resource-group hackajob-resourceGrp --name hackajob-lb --location eastus2 
+Please note that the default public IP used for creation will be changed from Basic to Standard in the future.
+{
+  "loadBalancer": {
+    "backendAddressPools": [
+      {
+        "etag": "W/\"686114ca-e36d-4c79-aa26-8a8780a11c89\"",
+        "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Network/loadBalancers/hackajob-lb/backendAddressPools/hackajob-lbbepool",
+        "name": "hackajob-lbbepool",
+        "properties": {
+          "loadBalancerBackendAddresses": [],
+          "provisioningState": "Succeeded"
+        },
+        "resourceGroup": "hackajob-resourceGrp",
+        "type": "Microsoft.Network/loadBalancers/backendAddressPools"
+      }
+    ],
+    "frontendIPConfigurations": [
+      {
+        "etag": "W/\"686114ca-e36d-4c79-aa26-8a8780a11c89\"",
+        "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Network/loadBalancers/hackajob-lb/frontendIPConfigurations/LoadBalancerFrontEnd",
+        "name": "LoadBalancerFrontEnd",
+        "properties": {
+          "privateIPAllocationMethod": "Dynamic",
+          "provisioningState": "Succeeded",
+          "publicIPAddress": {
+            "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Network/publicIPAddresses/PublicIPhackajob-lb",
+            "resourceGroup": "hackajob-resourceGrp"
+          }
+        },
+        "resourceGroup": "hackajob-resourceGrp",
+        "type": "Microsoft.Network/loadBalancers/frontendIPConfigurations"
+      }
+    ],
+    "inboundNatPools": [],
+    "inboundNatRules": [],
+    "loadBalancingRules": [],
+    "outboundRules": [],
+    "probes": [],
+    "provisioningState": "Succeeded",
+    "resourceGuid": "18910945-546c-4afa-abc0-a775ad1f7a5a"
+  }
+}
+root@0ab720271628:~# az network lb probe create --resource-group hackajob-resourceGrp --lb-name hackajob-lb --name HTTPProbe --protocol tcp --port 80
+{
+  "etag": "W/\"2351ce8a-3bc0-4c42-a7f5-c06ba55c2802\"",
+  "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Network/loadBalancers/hackajob-lb/probes/HTTPProbe",
+  "intervalInSeconds": 15,
+  "name": "HTTPProbe",
+  "numberOfProbes": 2,
+  "port": 80,
+  "probeThreshold": 1,
+  "protocol": "Tcp",
+  "provisioningState": "Succeeded",
+  "resourceGroup": "hackajob-resourceGrp",
+  "type": "Microsoft.Network/loadBalancers/probes"
+}
+root@0ab720271628:~# az network lb rule create --resource-group hackajob-resourceGrp --lb-name hackajob-lb --name HTTPRule --protocol tcp --frontend-port 80 --backend-port 80 --frontend-ip-name loadBalancerFrontEnd --backend-pool-name hackajob-lbbepool --probe-name HTTPProbe
+ \ Running ..
+{
+  "backendAddressPool": {
+    "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Network/loadBalancers/hackajob-lb/backendAddressPools/hackajob-lbbepool",
+    "resourceGroup": "hackajob-resourceGrp"
+  },
+  "backendAddressPools": [
+    {
+      "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Network/loadBalancers/hackajob-lb/backendAddressPools/hackajob-lbbepool",
+      "resourceGroup": "hackajob-resourceGrp"
+    }
+  ],
+  "backendPort": 80,
+  "disableOutboundSnat": false,
+  "enableFloatingIP": false,
+  "enableTcpReset": false,
+  "etag": "W/\"2b31a230-2ccc-40a9-b1a0-c1d7a420b17f\"",
+  "frontendIPConfiguration": {
+    "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Network/loadBalancers/hackajob-lb/frontendIPConfigurations/LoadBalancerFrontEnd",
+    "resourceGroup": "hackajob-resourceGrp"
+  },
+  "frontendPort": 80,
+  "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Network/loadBalancers/hackajob-lb/loadBalancingRules/HTTPRule",
+  "idleTimeoutInMinutes": 4,
+  "loadDistribution": "Default",
+  "name": "HTTPRule",
+  "probe": {
+    "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Network/loadBalancers/hackajob-lb/probes/HTTPProbe",
+    "resourceGroup": "hackajob-resourceGrp"
+  },
+  "protocol": "Tcp",
+  "provisioningState": "Succeeded",
+  "resourceGroup": "hackajob-resourceGrp",
+  "type": "Microsoft.Network/loadBalancers/loadBalancingRules"
+}
+root@0ab720271628:~# 
+root@0ab720271628:~# 
+
+root@0ab720271628:~# az network lb address-pool create --resource-group hackajob-resourceGrp --lb-name hackajob-lb --name  hackajob-lbbepool
+{
+  "etag": "W/\"2a72777c-cdef-4d81-b06d-ccbf5c728b41\"",
+  "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Network/loadBalancers/hackajob-lb/backendAddressPools/hackajob-lbbepool",
+  "loadBalancerBackendAddresses": [],
+  "loadBalancingRules": [
+    {
+      "id": "/subscriptions/834f45c4-4792-46fe-a192-94a53c91002d/resourceGroups/hackajob-resourceGrp/providers/Microsoft.Network/loadBalancers/hackajob-lb/loadBalancingRules/HTTPRule",
+      "resourceGroup": "hackajob-resourceGrp"
+    }
+  ],
+  "name": "hackajob-lbbepool",
+  "provisioningState": "Succeeded",
+  "resourceGroup": "hackajob-resourceGrp",
+  "type": "Microsoft.Network/loadBalancers/backendAddressPools"
+}
+root@0ab720271628:~# 

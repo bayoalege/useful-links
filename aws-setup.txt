@@ -1,0 +1,6 @@
+aws configure
+aws ec2 create-key-pair --key-name hackajob --query 'KeyMaterial' --output text > ~/Hackajob.pem
+aws ec2 create-security-group --group-name hackajob-sg --description "Security group for hackajob instances"
+aws ec2 authorize-security-group-ingress --group-name hackajob-sg --protocol tcp --port 80 --cidr 0.0.0.0/0
+aws ec2 run-instances --image-id ami-xxxxxxxxxxxxxxxxx --instance-type t2.micro --key-name hackajob --security-group-ids hackajob-sg --count 2 --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=hackajob-ec2-1},{Key=Name,Value=hackajob-ec2-2}]'
+aws elbv2 create-load-balancer --name hackajob-lb --subnets subnet-xxxxxxxxxxxxxxxxx subnet-yyyyyyyyyyyyyyyyy --security-groups hackajob-sg

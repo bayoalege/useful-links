@@ -1,0 +1,39 @@
+Question:
+Log in with your Microsoft Azure Credentials using az login command and create one Load balancer named hackajob-lb which must contain two Virtual Machines named hackajob-vm-1 and hackajob-vm-2.
+
+Commands to use:
+az login
+az vm create
+etc.
+
+Solution:
+1. Log in to your Azure account:
+
+2. Create a resource group (if not already created):
+az account list-locations --output table
+az group create --name hackajob-resourceGrp --location eastus2
+
+3. Create two virtual machines:
+ 
+az vm create --resource-group hackajob-resourceGrp --name hackajob-vm-1 --image Ubuntu2204 --size Standard_DS1_v2 --location eastus2 --admin-username azureuser --generate-ssh-keys
+
+az vm create --resource-group hackajob-resourceGrp --name hackajob-vm-2 --image Ubuntu2204 --size Standard_DS1_v2 --location eastus2 --admin-username azureuser --generate-ssh-keys
+
+4. Create a load balancer: - create lb, probe and rule
+az network lb create --resource-group hackajob-resourceGrp --name hackajob-lb --location eastus2 --sku Standard
+az network lb probe create --resource-group hackajob-resourceGrp --lb-name hackajob-lb --name HTTPProbe --protocol tcp --port 80
+az network lb rule create --resource-group hackajob-resourceGrp --lb-name hackajob-lb --name HTTPRule --protocol tcp --frontend-port 80 --backend-port 80 --frontend-ip-name loadBalancerFrontEnd --backend-pool-name hackajob-lbbepool --probe-name HTTPProbe
+
+
+5. Add virtual machines to the backend pool:
+az network lb address-pool create --resource-group hackajob-resourceGrp --lb-name hackajob-lb --name hackajob-vm-pool
+
+az network nic ip-config address-pool add --resource-group hackajob-resourceGrp --lb-name hackajob-lb --nic-name hackajob-vm-1VMNic --ip-config-name ipconfig1 --address-pool hackajob-vm-pool
+
+az network nic ip-config address-pool add --resource-group hackajob-resourceGrp --lb-name hackajob-lb --nic-name hackajob-vm-2VMNic --ip-config-name ipconfig1 --address-pool hackajob-vm-pool
+Make sure to replace the placeholder values in the commands with your actual Azure configuration. This script assumes you are using Ubuntu as the VM image, but you can change it based on your requirements.
+
+
+
+
+

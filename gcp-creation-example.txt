@@ -1,139 +1,91 @@
 GCP Creation Steps:
 Step 1: Initialize gcloud
 gcloud init
-Bayo's Google Credentials token: 4/0AfJohXln9aByudLVpZUtjoUjlK2YaLNqK1P9i69ZywzcwfzDAjgxRWUcG69R25ydsv53qQ
- 
-Step 2: Create VM Instances
-# Create VM instance hackajob-vm-1
-gcloud compute instances create hackajob-vm-1 --machine-type=f1-micro --image-family=ubuntu-2004-lts --image-project=ubuntu-os-cloud --zone=us-west4-c
+Bayo's Google Credentials token: 4/0AfJohXln9aByudLVpZUtjoUjlK2YaLNqK1P9i69ZywzcwfzDAjgxRWUcG69R25ydsv53q
 
-# Create VM instance hackajob-vm-2
-gcloud compute instances create hackajob-vm-2 --machine-type=f1-micro --image-family=ubuntu-2004-lts --image-project=ubuntu-os-cloud --zone=us-west4-c
+Create the instance template:
+gcloud compute instance-templates create bayo-inst-temp-1 \
+  --machine-type=e2-micro \
+  --image-family=ubuntu-minimal-2204-jammy \
+  --image-project=ubuntu-os-cloud \
+  --boot-disk-size=30GB \
+  --boot-disk-type=pd-balanced \
+  --tags=http-server,https-server,lb-health-check \
+  --metadata=startup-script="apt update -y && apt install -y apache2 && echo 'Bayo\'s web-server on \${HOSTNAME}' > /var/www/html/index.html" \
+  #--service-account=601084348983-compute@developer.gserviceaccount.com
 
-Step 3: Create Load Balancer - health-check, backend-services, target-http-proxies, url-map, and forwarding-rules
-# Create a health check
-gcloud compute health-checks create http hackajob-health-check --port=80
+Create instance group and auto-scaler group:
+# 1. Create Instance Group
+gcloud compute instance-groups managed create bayo-inst-grp-1 \
+  --base-instance-name=bayo-inst-grp-1 \
+  --size=3 \
+  --region=us-east4 \
+  --template=bayo-inst-temp-1 \
+  --named-ports=http:80
 
-# Create a backend service
-gcloud compute backend-services create hackajob-backend-service --protocol=HTTP --health-checks=hackajob-health-check --global
+# 2. Create Instance Group Manager
+gcloud beta compute instance-groups managed create bayo-inst-grp-1 \
+  --base-instance-name=bayo-inst-grp-1 \
+  --size=3 \
+  --region=us-east4 \
+  --template=bayo-inst-temp-1 \
+  --named-ports=http:80 \
+  --auto-healing-policies="initialDelaySec=300,healthCheck=projects/kodecloud-learning/global/healthChecks/bayo-simple-health-check" \
+  #--service-account=601084348983@cloudservices.gserviceaccount.com \
+  --status=isStable=true
 
-# Create a URL map
-gcloud compute url-maps create hackajob-url-map --default-service=hackajob-backend-service
-
-# Create a target HTTP proxy
-gcloud compute target-http-proxies create hackajob-http-proxy --url-map=hackajob-url-map
-
-# Create a global forwarding rule with the correct name
-gcloud compute forwarding-rules create hackajob-lb--global --target-http-proxy=hackajob-http-proxy --ports=80
-
-
-GCP Creation Validation steps:
-bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute health-checks list
-NAME: hackajob-health-check
-REGION: 
-PROTOCOL: HTTP
-
-bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute backend-services list; gcloud compute backend-services describe hackajob-backend-service --global
-NAME: hackajob-backend-service
-BACKENDS: us-west4-c/instanceGroups/hackajob-vm-1,us-west4-c/instanceGroups/hackajob-vm-2
-PROTOCOL: HTTP
-
-bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute url-maps list; gcloud compute url-maps describe hackajob-url-map --global
-NAME: hackajob-url-map
-DEFAULT_SERVICE: backendServices/hackajob-backend-service
-
-bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute target-http-proxies list
-NAME: hackajob-http-proxy
-URL_MAP: hackajob-url-map
+# 3. Create Autoscaler
+gcloud compute autoscalers create bayo-inst-grp-1 \
+  --target=bayo-inst-grp-1 \
+  --region=us-east4 \
+  --autoscaling-policy="cpuUtilization.utilizationTarget=0.9,cpuUtilization.predictiveMethod=NONE,maxNumReplicas=6,coolDownPeriodSec=60,mode=ON,minNumReplicas=3"
 
 
-bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute target-http-proxies describe hackajob-http-proxy --global
-creationTimestamp: '2024-02-03T10:40:27.701-08:00'
-fingerprint: X5l32t11Xjo=
-id: '4905245756347332212'
-kind: compute#targetHttpProxy
-name: hackajob-http-proxy
-selfLink: https://www.googleapis.com/compute/v1/projects/gentle-voltage-413217/global/targetHttpProxies/hackajob-http-proxy
-urlMap: https://www.googleapis.com/compute/v1/projects/gentle-voltage-413217/global/urlMaps/hackajob-url-map
+Load balancer setup:
 
 
-bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute forwarding-rules hackajob=lb
-NAME: hackajob-lb
-REGION: 
-IP_ADDRESS: 34.36.32.21
-IP_PROTOCOL: TCP
-TARGET: hackajob-http-proxy
-bayo_alege@cloudshell:~ (gentle-voltage-413217)$ 
+# 1. Create a Security Policy
+gcloud compute security-policies create security-policy-for-backend-service-bayo-backend-svc \
+  --description="Default security policy for: bayo-backend-svc" \
+  --rules="action=allow,match='config.srcIpRanges=*',versionedExpr='SRC_IPS_V1',priority=2147483647" \
+  --rules="action=throttle,description='Default rate limiting rule',match='config.srcIpRanges=*',versionedExpr='SRC_IPS_V1',priority=2147483646,rateLimitOptions=conformAction=allow,enforceOnKey=IP,exceedAction='deny(403)',rateLimitThreshold.count=500,rateLimitThreshold.intervalSec=60"
 
-bayo_alege@cloudshell:~ (gentle-voltage-413217)$ gcloud compute forwarding-rules describe hackajob-lb --global
-IPAddress: 34.36.32.21
-IPProtocol: TCP
-creationTimestamp: '2024-02-03T11:08:41.936-08:00'
-description: ''
-fingerprint: Go57xqATnRA=
-id: '3843769362512294358'
-kind: compute#forwardingRule
-labelFingerprint: 42WmSpB8rSM=
-loadBalancingScheme: EXTERNAL
-name: hackajob-lb
-networkTier: PREMIUM
-portRange: 80-80
-selfLink: https://www.googleapis.com/compute/v1/projects/gentle-voltage-413217/global/forwardingRules/hackajob-lb
-target: https://www.googleapis.com/compute/v1/projects/gentle-voltage-413217/global/targetHttpProxies/hackajob-http-proxy
-bayo_alege@cloudshell:~ (gentle-voltage-413217)$ 
+# 2. Create a Backend Service
+gcloud compute backend-services create bayo-backend-svc \
+  --description="bayo-backend-svc" \
+  --protocol=HTTP \
+  --port-name=http \
+  --health-checks=bayo-simple-health-check \
+  --security-policy=security-policy-for-backend-service-bayo-backend-svc \
+  --enable-cdn \
+  --load-balancing-scheme=EXTERNAL_MANAGED \
+  --locality-lb-policy=ROUND_ROBIN \
+  --timeout=30 \
+  --log-config=enable=true,sample-rate=1
 
-GCP Clean up steps
-Step 1: Delete Load Balancer - health-check, backend-services, target-http-proxies, url-map, and forwarding-rules
+# 3. Set Security Policy for Backend Service
+gcloud compute backend-services set-security-policy bayo-backend-svc \
+  --security-policy=security-policy-for-backend-service-bayo-backend-svc
 
-# Delete a global forwarding rule with the correct name
-gcloud compute forwarding-rules delete hackajob-lb --global
+# 4. Create a URL Map
+gcloud compute url-maps create bayo-load-balancer-1 \
+  --default-service=bayo-backend-svc
 
-# Delete a target HTTP proxy
-gcloud compute target-http-proxies delete hackajob-http-proxy --global
+# 5. Create a Target HTTP Proxy
+gcloud compute target-http-proxies create bayo-load-balancer-1-target-proxy \
+  --url-map=bayo-load-balancer-1
 
-# Delete a URL map
-gcloud compute url-maps delete hackajob-url-map --global
+# 6. Create a Forwarding Rule
+gcloud compute forwarding-rules create bayo-frontendip-and-port \
+  --description="bayo-frontendIP-and-port" \
+  --ip-version=IPV4 \
+  --port-range=80 \
+  --target-http-proxy=bayo-load-balancer-1-target-proxy \
+  --load-balancing-scheme=EXTERNAL_MANAGED \
+  --network-tier=PREMIUM \
+  --region=us-east4
 
-# Delete a backend service
-gcloud compute backend-services delete hackajob-backend-service --global
-
-# Delete a health check
-gcloud compute health-checks delete hackajob-health-check --global
-
-Step 2:  VM Instances
-# Create VM instance hackajob-vm-1
-gcloud compute instances delete hackajob-vm-1 --zone=us-west4-c
-
-# Create VM instance hackajob-vm-2
-gcloud compute instances delete hackajob-vm-2 --zone=us-west4-c
-
-Optionally delete the instance-groups,
-gcloud compute instance-groups managed delete hackajob-vm-1 --zone=us-west4-c --quiet
-gcloud compute instance-groups managed delete hackajob-vm-2 --zone=us-west4-c --quiet
-gcloud compute instance-groups list
-
-gcloud compute instance-templates delete  hackajob-vm-template
-
- gcloud compute instance-templates list
- gcloud compute instances list
-
-
-1. To create instance using instance template:
-gcloud compute instance-templates create hackajob-vm-template --machine-type=f1-micro --image-project=ubuntu-os-cloud --tags=http-server --zone=us-west4-c
-gcloud compute instance-templates describe hackajob-vm-template
-
-To create named instance with template:
-gcloud compute instances create hackajob-vm-1 --source-instance-template=hackajob-vm-template --zone=us-west4-c
-gcloud compute instances create hackajob-vm-2 --source-instance-template=hackajob-vm-template --zone=us-west4-c
-
-To creat instance group from template:
-1. gcloud compute instance-groups managed create hackajob-vm-group --base-instance-name=hackajob-vm --size=2 --template=hackajob-vm-template --zone=us-west4-c
-2. gcloud compute instance-groups managed set-autoscaling hackajob-vm-group --max-num-replicas=5 --target-cpu-utilization=50 --cool-down-period=60
-
-
-or create directly without using instance template:
-1. gcloud compute instances create hackajob-vm-1 --machine-type=f1-micro --image-family=ubuntu-2004-lts --image-project=ubuntu-os-cloud --zone=us-west4-c
-2. gcloud compute instances create hackajob-vm-2 --machine-type=f1-micro --image-family=ubuntu-2004-lts --image-project=ubuntu-os-cloud --zone=us-west4-c
-
-
-gcloud compute operations list - to see all operations on gcloud compute node
+# 7. Set Named Ports for Instance Group
+gcloud beta compute instance-groups set-named-ports bayo-inst-grp-1 \
+  --named-ports="name=http,port=80" \
+  --region=us-east4
