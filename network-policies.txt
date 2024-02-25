@@ -1,0 +1,315 @@
+Deny all from production namespace policy:
+
+cat deny-all-ingress.yaml:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+  namespace: production
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+
+
+All frontend to middleware policy:
+
+cat frontend-to-middleware.yaml:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-middleware-ingress
+  namespace: production
+spec:
+  podSelector: 
+    matchLabels:
+      app: middleware
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend
+
+All middleware to mysql policy:
+
+cat middleware-to-mysql.yaml:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: middleware-mysql-ingress
+  namespace: production
+spec:
+  podSelector: 
+    matchLabels:
+      app: mysql
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: middleware
+
+Create a new, single network policy called allow-alpha-logger that would allow all pods from the alpha-logger namespace to the alpha-prod namespace. Use the label function=logging when creating the network policy.
+
+cat allow-alpha-logger.yaml:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-alpha-logger
+  namespace: alpha-prod
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          function: logging
+
+Create a new, single network policy called allow-beta-logger-1 that would allows pods with label role=logger-1 from only the beta-logger namespace to the beta-prod namespace.
+Use the label function=logging with the namespace selector when creating the network policy.
+Do not alter the existing objects in anyway!
+
+cat all-beta-logger-1.yaml:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-beta-logger-1
+  namespace: beta-prod
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          function: logging
+    - podSelector:
+        matchLabels:
+          role: logger-1
+
+
+cat deny-egress-to-ns.yaml 
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-egress-to-ns
+spec:
+  podSelector: {} 
+  policyTypes:
+    - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: gamma
+      podSelector:
+        matchLabels:
+          access: admin
+
+
+
+The policy we earlier applied will deny all the egress traffic except for some pods in the gamma namespace.
+But we need the port 53 connectivity for all pods in the default namespace. So, create a new network policy egress-on-p53 that will allow the egress connection on port 53 in the default namespace.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-egress-to-ns
+spec:
+  podSelector: {} 
+  policyTypes:
+    - Egress
+  egress:
+  - to:
+
+To create the network policy that will allow egress traffic on port 53, you can use the following manifest.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+      name: egress-on-p53
+spec:
+      egress:
+      - ports:
+          - protocol: TCP
+            port: 53
+          - protocol: UDP
+            port: 53
+      policyTypes:
+      - Egress
+
+
+cat jonin-to-genin.yaml 
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jonin-to-genin
+  namespace: jonin
+spec:
+  podSelector: {} 
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            rank: genin
+        namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: genin
+
+
+Policy charms-and-students allows ingress traffic from pods with labels hogwarts: admitted
+
+cat charms-and-students.yaml 
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: charms-and-students
+  namespace: charms
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          hogwarts: admitted
+
+Policy charms-no-egress denies all egress traffic to all namespaces except its own (charms namespace)
+
+cat charms-no-egress.yaml 
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: charms-no-egress
+  namespace: charms
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: charms
+
+Policy default-allow-all allows the dumbledore pod unrestricted ingress and egress traffic from/to all pods?
+
+cat default-all-all.yaml 
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-all
+spec:
+  podSelector:
+    matchLabels:
+      i-am: dumbledore
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - {}
+  egress:
+  - {}
+
+Policy potions-rules limits ingress and egress traffic to pods with labels class: potions
+
+cat  potions-rules.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: potions-rules
+  namespace: potions
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          class: potions
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          class: potions
+
+
+Policy potions-port-rule allows egress traffic to the darkarts namespace but only on port 80
+
+cat potions-port-rule.yaml 
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: potions-port-rule
+  namespace: potions
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: darkarts
+    ports:
+      - port: 80
+        protocol: TCP
+
+Policy darkarts-no-access blocks all ingress traffic
+Policy darkarts-no-access blocks all egress traffic
+
+cat darkarts-no-access.yaml 
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: darkarts-no-access
+  namespace: darkarts
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress: []
+  egress: []
+
+Policy darkarts-magic denies all ingress traffic except from dumbledore pod in the default namespace (using existing labels)
+Policy darkarts-magic only allows egress traffic to port 53 (both TCP and UDP) to IPs in CIDR range of 10.0.0.0/24
+
+cat darkarts-magic.yaml 
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: darkarts-magic
+  namespace: darkarts
+spec:
+  podSelector: {}
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          i-am: dumbledore
+      namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: default
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/24
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+

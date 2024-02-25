@@ -1,0 +1,191 @@
+https://semaphoreci.com/blog/prometheus-grafana-kubernetes-helm
+
+Configure a basic monitoring and logging setup for a microservices architecture.
+
+Monitoring with Prometheus using Helm:
+Prometheus Helm Chart
+# prometheus-values.yaml
+
+serverFiles:
+  prometheus.yml: |-
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod
+    # Add other scraping configurations as needed
+
+alertmanagerFiles:
+  alertmanager.yml: |-
+    route:
+      receiver: slack
+    receivers:
+      - name: slack
+        slack_configs:
+          - api_url: '<YOUR_SLACK_WEBHOOK_URL>'
+            channel: '#alerts'
+            send_resolved: true
+
+# Install Prometheus using Helm
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+helm install prometheus prometheus-community/prometheus --version <PROMETHEUS_CHART_VERSION> -f prometheus-values.yaml
+
+Logging with ELK Stack using Helm:
+ELK Stack Helm Charts
+# Add Elastic Helm Charts repository
+helm repo add elastic https://helm.elastic.co
+
+# Install Elasticsearch
+helm install elasticsearch elastic/elasticsearch --version  <ELASTICSEARCH_CHART_VERSION>
+
+# Install Logstash
+helm install logstash elastic/logstash --version  <LOGSTASH_CHART_VERSION>
+
+# Install Kibana
+helm install kibana elastic/kibana  --version <KIBANA_CHART_VERSION>
+Microservice with Filebeat using Helm:
+Sample Microservice Helm Chart with Filebeat
+ 
+# sample-microservice-with-logging.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sample-microservice
+  labels:
+    app: sample-microservice
+spec:
+  containers:
+    - name: sample-microservice-container
+      image: your/sample-microservice:latest
+      ports:
+        - containerPort: 8080
+      volumeMounts:
+        - name: logs-volume
+          mountPath: /var/logs
+
+    - name: filebeat
+      image: docker.elastic.co/beats/filebeat:7.15.1
+      volumeMounts:
+        - name: logs-volume
+          mountPath: /var/logs
+        - name: filebeat-config
+          mountPath: /usr/share/filebeat/filebeat.yml
+          subPath: filebeat.yml
+  volumes:
+    - name: logs-volume
+      emptyDir: {}
+
+
+Filebeat daemonset per node:
+Filebeat (log shipper) -> logstash (ETL) -> ElasticSearch
+
+# 1. filebeat-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filebeat-config
+data:
+  filebeat.yml: |
+    filebeat.inputs:
+    - type: log
+      paths:
+        - /var/logs/*.log
+
+    output.logstash:
+      hosts: ["logstash-service:5044"]
+
+# 2. Update DaemonSet for Filebeat:
+Create a DaemonSet manifest for Filebeat, making sure to use the co.elastic.logs/module annotation to specify which modules should be enabled for log collection. You can use this annotation to target specific pods based on labels.
+
+# filebeat-daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: filebeat
+spec:
+  selector:
+    matchLabels:
+      app: filebeat
+  template:
+    metadata:
+      labels:
+        app: filebeat
+    annotations:
+      co.elastic.logs/module: "*"
+      filebeat: logging
+    spec:
+      containers:
+      - name: filebeat
+        image: docker.elastic.co/beats/filebeat:7.15.1
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/filebeat/filebeat.yml
+          subPath: filebeat.yml
+        - name: logs
+          mountPath: /var/logs
+      volumes:
+      - name: config
+        configMap:
+          name: filebeat-config # ConfigMap containing filebeat.yml
+      - name: logs
+        hostPath:
+          path: /var/logs  # Path shared among all microservices
+
+# sample-microservice-with-logging-annotation.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sample-microservice
+  labels:
+    app: sample-microservice
+  annotations:
+    filebeat: logging
+spec:
+  containers:
+    - name: sample-microservice-container
+      image: your/sample-microservice:latest
+      ports:
+        - containerPort: 8080
+
+
+# filebeat.yaml - to enable both elasticsearch and logstash
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /var/logs/*.log
+    # Add more paths as needed
+
+output.elasticsearch:
+  hosts: ["your-elasticsearch-host:9200"]
+  # Specify additional Elasticsearch settings as needed
+
+output.logstash:
+  hosts: ["logstash-service:5044"]
+  # Add more Logstash hosts if you have multiple instances
+
+# Configure additional modules as needed
+filebeat.modules:
+   - module: system
+     syslog:
+       enabled: true
+       var.paths: ["/var/log/syslog*"]
+
+# Additional settings - for elastic index creation
+setup.template.name: "filebeat"
+setup.template.pattern: "filebeat-*"
+setup.ilm.enabled: false
+
+# Filebeat logging settings
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat.log
+  keepfiles: 7
+  permissions: 0644

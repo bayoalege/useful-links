@@ -1,0 +1,19 @@
+#Equinix Metal's Ubuntu installation ships without an unprivileged user-account, so let's add one.
+#Run as k8s user
+sudo useradd k8s -G sudo -m -s /bin/bash
+sudo passwd k8s
+
+sudo su k8s
+
+cd $HOME
+
+mkdir .kube
+#from master node first
+sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+echo "export KUBECONFIG=$HOME/.kube/config" | tee -a ~/.bashrc
+source ~/.bashrc
+
+# on each worker only
+kubectl label node $(hostname) node-role.kubernetes.io/worker=worker on control-plane
