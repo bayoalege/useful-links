@@ -80,3 +80,12 @@ sudo modprobe br_netfilter
 sudo useradd k8s -G sudo -m -s /bin/bash
 sudo passwd k8s
 sudo su - k8s
+
+#10. Install CNI and change the default alloc_ip to avoid overlap
+
+#11. Install the weave-net cni
+kubectl apply -f https://github.com/weaveworks/weave/releases/download/v2.8.1/weave-daemonset-k8s-1.11.yaml
+kubectl -n kube-system set env ds/weave-net --containers=weave IPALLOC_RANGE="172.30.0.0/16"
+
+ kubectl create deployment demo --image=httpd --port=80
+ 

@@ -1,0 +1,45 @@
+User
+I want to manually recreate this cert/key (renew) using the ca.crt:    
+    - --etcd-cafile=/etc/kubernetes/pki/etcd/ca.crt
+    - --etcd-certfile=/etc/kubernetes/pki/apiserver-etcd-client.crt
+    - --etcd-keyfile=/etc/kubernetes/pki/apiserver-etcd-client.key
+
+#!/bin/bash
+
+# Step 1: Generate a new key file
+openssl genrsa -out new_key.key 2048
+
+# Step 2: Create a certificate signing request (CSR)
+openssl req -new -key new_key.key -out new_csr.csr -subj "/CN=etcd-client"
+
+# Step 3: Sign the CSR with the CA
+openssl x509 -req -in new_csr.csr -CA /etc/kubernetes/pki/etcd/ca.crt -CAkey /etc/kubernetes/pki/etcd/ca.key -CAcreateserial -out new_cert.crt -days 365
+
+# Step 4: Verify the certificate
+openssl x509 -in new_cert.crt -text -noout
+
+# Step 5: Replace the old certificate/key files
+mv new_cert.crt /etc/kubernetes/pki/apiserver-etcd-client.crt
+mv new_key.key /etc/kubernetes/pki/apiserver-etcd-client.key
+
+echo "Certificate and key files have been recreated and updated."
+
+Using k8s Certificate API instead
+1. User action to request access from DevOps
+ openssl genrsa -out bayo.key 2048
+ openssl req -new -key bayo.key -out bayo.csr -subj "/CN=bayo"
+2. Send bayo.csr to DevOps team Admin, who review and create a CSR Object
+3. DevOps: Create CSR Object resource in k8s with cat bayo.csr|base64
+k apply -f  bayo.yaml
+kubectl get csr
+4. Approve certificate
+kubectl certificate approve bayo
+To extract certificate and give to the user use:
+kubectl get csr bayo -o yaml
+Hint: updated after CSR approval with certificate.
+5. Give the certificate to user in decoded format (base64 -d)
+
+2. Review Requests: 
+3. Approve Requests
+4. Share Certs to Users
+

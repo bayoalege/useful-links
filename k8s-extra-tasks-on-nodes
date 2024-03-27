@@ -1,0 +1,641 @@
+#Equinix Metal's Ubuntu installation ships without an unprivileged user-account, so let's add one.
+#Run as k8s user
+
+#https://deploy.equinix.com/developers/guides/exposing-kubernetes-over-fabric/
+#https://www.siderolabs.com/blog/kubernetes-on-equinix-metal-painlessly/ - talos
+#https://ystatit.medium.com/k8s-pv-pvc-and-configmap-for-prometheus-and-grafana-caa044b0d82b
+#https://deploy.equinix.com/developers/guides/configuring-bgp-with-bird/
+#https://www.sobyte.net/post/2021-09/use-kube-vip-ha-k8s-lb/
+
+#https://www.youtube.com/watch?v=SueeqeioyKY - HA Proxy and KeepAlived for API Server HA
+#https://www.suse.com/c/rancher_blog/comparing-kubernetes-cni-providers-flannel-calico-canal-and-weave/
+
+#https://github.com/craigtracey/docker-ucarp/tree/master
+
+#https://foxutech.com/setup-a-multi-master-kubernetes-cluster-with-kubeadm/#:~:text=Setup%20a%20multi-master%20Kubernetes%20cluster%20with%20kubeadm%201,Setup%20...%206%20Initializing%20the%20master%20nodes%20 
+
+#https://medium.com/tektutor/using-metal-lb-on-a-bare-metal-onprem-kubernetes-setup-6d036af1d20c#id_token=eyJhbGciOiJSUzI1NiIsImtpZCI6IjZmOTc3N2E2ODU5MDc3OThlZjc5NDA2MmMwMGI2NWQ2NmMyNDBiMWIiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiIyMTYyOTYwMzU4MzQtazFrNnFlMDYwczJ0cDJhMmphbTRsamRjbXMwMHN0dGcuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiIyMTYyOTYwMzU4MzQtazFrNnFlMDYwczJ0cDJhMmphbTRsamRjbXMwMHN0dGcuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMDg0NDU3NDA1MjM2OTg5NzY4MDkiLCJlbWFpbCI6ImJheW8uYWxlZ2VAZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsIm5iZiI6MTcwOTM1ODkwMiwibmFtZSI6IkJheW8gQWxlZ2UiLCJwaWN0dXJlIjoiaHR0cHM6Ly9saDMuZ29vZ2xldXNlcmNvbnRlbnQuY29tL2EvQUNnOG9jTC1JVkRHRXUzaVlrV3N2UGJNV0dIbjdqWndpam9jRnQ2ZGxMaXYzb29yPXM5Ni1jIiwiZ2l2ZW5fbmFtZSI6IkJheW8iLCJmYW1pbHlfbmFtZSI6IkFsZWdlIiwibG9jYWxlIjoiZW4iLCJpYXQiOjE3MDkzNTkyMDIsImV4cCI6MTcwOTM2MjgwMiwianRpIjoiNzdhOGRhMDJkY2U3YTM5Mzk2M2M4YmMwYWZhNGNiYzA2NzFiNjNmNiJ9.Ot4mLJqnrJ40wyGMdiAEQEMIV0QaWU4VgZTBdrfGMChfgY1tyUot52u75IJv6U6zVLrI5kr-sYikJAeJUBCE3CLydlWblo8swFxjmRC6slGLrzAEQCyxTDP-h-fhz1rrjFE_f2FEoaNMa0zUA3muzB8AVewMgYeE1qRzAWI1L60_LpzPKW4eVQfgD-hqVg9NA8R1yw5iqJ4OjVAKqqUxyuWByAjE8occpgejzpNVkGUX60qMELjikNxbYHnfp0bmBTvT_alfswLMdnLibxKEx2zKi2kSz0ATTz-_CLQT1B_wYizPpviMKYc0zwf4z934vJS-w3gSXkrNz5CLaiNIwA
+
+#https://www.youtube.com/watch?v=q92MYG-EW-w -- multi-master easy setup with haproxy
+
+#https://phoenixnap.com/kb/how-to-install-kubernetes-on-a-bare-metal-server - simple 1 master 2 worker nodes
+
+#https://kubesphere.io/docs/v3.4/installing-on-linux/high-availability-configurations/set-up-ha-cluster-using-keepalived-haproxy/#haproxy-configuration - using kubesphere for cluster creation
+
+
+#Clustering HA: https://github.com/kodekloudhub/certified-kubernetes-administrator-course/blob/master/kubeadm-clusters/aws-ha/terraform/controlplane.sh
+
+#https://www.youtube.com/watch?v=uUupRagM7m0&list=PL2We04F3Y_41jYdadX55fdJplDvgNGENo -- MANUAL CLUSTER SETUP
+#https://github.com/mmumshad/kubernetes-the-hard-way?tab=readme-ov-file --- cluster the hardway repo
+
+#https://kodekloud.com/topic/network-troubleshooting/ - Network Troubleshooting link
+Troubleshooting cluster dns and kube-proxy:
+https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/
+https://kubernetes.io/docs/tasks/administer-cluster/dns-debugging-resolution/
+
+#https://kodekloud.com/topic/kubernetes-update-and-project-videos-your-essential-guide-3/
+
+#istio - https://istio.io/latest/docs/setup/getting-started/#download
+
+sudo useradd k8s -G sudo -m -s /bin/bash
+sudo passwd k8s
+
+sudo su k8s
+
+cd $HOME
+
+mkdir .kube
+#from master node first
+sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+echo "export KUBECONFIG=$HOME/.kube/config" | tee -a ~/.bashrc
+source ~/.bashrc
+
+# on each worker only
+kubectl label node $(hostname) node-role.kubernetes.io/worker=worker #on control-plane
+
+#install kubernetes-dasbhoard:
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v3.0.0-alpha0/charts/kubernetes-dashboard.yaml
+
+export IP="147.75.54.55" #master-node-ip address
+
+ssh -i id_ed25519 -L 8001:127.0.0.1:8001 root@139.178.82.241
+sudo su k8s
+
+kubectl proxy &
+
+kubectl -n kubernetes-dashboard describe secret $(kubectl -n kubernetes-dashboard get secret | grep admin-user | awk '{print $1}')
+
+#if you have more second, third control plane use this instead:
+f I want to add more nodes for high availability, I could use command below,
+token_ca_cert_hash=$(openssl x509 -in /etc/kubernetes/pki/ca.crt -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256 | awk '{print $2}')
+token_value=$(kubeadm token list | awk 'NR==2{print $1}')
+apiserver_endpoint=$(kubectl cluster-info | grep -i Kubernetes | awk '{print $NF}')
+
+echo "kubeadm join ${apiserver_endpoint} \
+    --token ${token_value} \
+    --discovery-token-ca-cert-hash sha256:${token_ca_cert_hash} \
+    --control-plane"
+
+Install ingress-nginx control:
+
+ helm upgrade --install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace -f bayo-values.yaml
+Release "ingress-nginx" has been upgraded. Happy Helming!
+NAME: ingress-nginx
+LAST DEPLOYED: Wed Feb 28 15:11:19 2024
+NAMESPACE: ingress-nginx
+STATUS: deployed
+REVISION: 2
+TEST SUITE: None
+NOTES:
+The ingress-nginx controller has been installed.
+It may take a few minutes for the load balancer IP to be available.
+You can watch the status by running 'kubectl get service --namespace ingress-nginx ingress-nginx-controller --output wide --watch'
+
+An example Ingress that makes use of the controller:
+  apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+    name: example
+    namespace: foo
+  spec:
+    ingressClassName: nginx
+    rules:
+      - host: www.example.com
+        http:
+          paths:
+            - pathType: Prefix
+              backend:
+                service:
+                  name: exampleService
+                  port:
+                    number: 80
+              path: /
+    # This section is only required if TLS is to be enabled for the Ingress
+    tls:
+      - hosts:
+        - www.example.com
+        secretName: example-tls
+
+If TLS is enabled for the Ingress, a Secret containing the certificate and key must also be provided:
+
+  apiVersion: v1
+  kind: Secret
+  metadata:
+    name: example-tls
+    namespace: foo
+  data:
+    tls.crt: <base64 encoded cert>
+    tls.key: <base64 encoded key>
+  type: kubernetes.io/tls
+
+
+1. Enable local Global BGP
+2. Enable ipv4 BGP on each server
+3. Get an EIP on Networking section i.e. 147.28.147.160
+4. cat >>/etc/network/interfaces <<EOF
+auto lo:0
+iface lo:0 inet static
+  address 147.28.147.160
+  netmask 255.255.255.255
+EOF
+ifup lo:0 2>/dev/null
+
+3. 
+ root@bayo-k8s-cp-server-02:~#  curl https://metadata.platformequinix.com/metadata | jq '.bgp_neighbors[0] | { customer_ip: .customer_ip, customer_as: .customer_as, multihop: .multihop, peer_ips: .peer_ips, peer_as: .peer_as }'
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  3469  100  3469    0     0  86392      0 --:--:-- --:--:-- --:--:-- 86725
+{
+  "customer_ip": "10.70.249.5",
+  "customer_as": 65000,
+  "multihop": true,
+  "peer_ips": [
+    "169.254.255.1",
+    "169.254.255.2"
+  ],
+  "peer_as": 65530
+}
+root@bayo-k8s-cp-server-02:~# ifconfig bond0:0
+bond0:0: flags=5187<UP,BROADCAST,RUNNING,MASTER,MULTICAST>  mtu 1500
+        inet 10.70.249.5  netmask 255.255.255.254  broadcast 255.255.255.255
+        ether b4:96:91:70:23:90  txqueuelen 1000  (Ethernet)
+
+root@bayo-k8s-cp-server-02:~#
+
+root@bayo-k8s-cp-server-01:~# curl https://metadata.platformequinix.com/metadata | jq '.bgp_neighbors[0] | { customer_ip: .customer_ip, customer_as: .customer_as, multihop: .multihop, peer_ips: .peer_ips, peer_as: .peer_as }'
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  3475  100  3475    0     0  82124      0 --:--:-- --:--:-- --:--:-- 82738
+{
+  "customer_ip": "10.70.249.1",
+  "customer_as": 65000,
+  "multihop": true,
+  "peer_ips": [
+    "169.254.255.1",
+    "169.254.255.2"
+  ],
+  "peer_as": 65530
+}
+root@bayo-k8s-cp-server-01:~# ifconfig bound0:0
+bound0:0: error fetching interface information: Device not found
+root@bayo-k8s-cp-server-01:~# ifconfig bond0:0
+bond0:0: flags=5187<UP,BROADCAST,RUNNING,MASTER,MULTICAST>  mtu 1500
+        inet 10.70.249.1  netmask 255.255.255.254  broadcast 255.255.255.255
+        ether b4:96:91:84:39:58  txqueuelen 1000  (Ethernet)
+
+root@bayo-k8s-cp-server-01:~#
+
+ curl https://metadata.platformequinix.com/metadata | jq -r '.network.addresses[] | select(.public == false and .address_family == 4) | { gateway: .gateway }'
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  3469  100  3469    0     0  89589      0 --:--:-- --:--:-- --:--:-- 91289
+{
+  "gateway": "10.70.249.4"
+}
+
+kubeadm init phase upload-certs --upload-certs
+kubeadm token create --certificate-key --print-join-command
+
+kubectl drain bad-node  #move port to other node (recreate pods on other nodes) and mark unschedulable
+kubectl uncordon bad-node # after upgrade, now move pods back to node
+kubectl cordon bad-node # No pod move but make unschedulable for new pods
+
+kube-apiserver = version x - reference for all components except kubectl (x+1) > (x-1)
+controller manager and scheduler = version (x-1)
+kubelet and kube-proxy = version (x-2)
+only three versions are updated
+upgrade - one minor version at a time
+Master node MUST BE upgraded first, then the nodes
+work nodes - upgrade at once or one node at a time to reduce downtime, or add a new node with newer version, and remove the old nodes
+
+Upgrade k8s cluster from v1.xx.1 to v1.29.2
+On the first Controlplane node:
+
+vi /etc/apt/sources.list.d/kubernetes.list -- Update the version in the URL to the next available minor release, i.e v1.29.
+apt-get update
+apt-cache madison kubeadm - see the version of k8s to install
+
+1. kubeadm upgrade plan - to see version to upgrade to
+2. apt-mark unhold kubeadm && sudo apt install -y kubeadm=1.29.0-1.1 && apt-mark hold kubeadm
+3. kubeadm upgrade apply v1.29.0 # actual upgrade, after you upgrade the kubeadm command itself
+4. kubectl drain <controlplane1> --ignore-daemonsets
+5. apt-mark unhold kubelet kubectl && apt upgrade -y kubelet=1.29.0-1.1 kubectl=1.29.0-1.1
+6. systemctl daemon-reload && systemctl restart kubelet && kubeadm version && apt-mark hold kubelet kubectl
+7. kubectl uncordon controlplane1
+
+on other controlplane nodes:
+vi /etc/apt/sources.list.d/kubernetes.list -- Update the version in the URL to the next available minor release, i.e v1.29.
+apt-get update
+apt-cache madison kubeadm - see the version of k8s to install
+
+kubeadm upgrade node
+
+On all worker nodes:
+vi /etc/apt/sources.list.d/kubernetes.list -- Update the version in the URL to the next available minor release, i.e v1.29.
+apt-get update
+apt-cache madison kubeadm - see the version of k8s to install
+
+1. On the master node: kubectl drain node1 --ignore-daemonsets
+2. apt-get update
+3. apt-mark unhold kubeadm && sudo apt install -y kubeadm=1.29.0-1.1 && apt-mark hold kubeadm
+4. kubeadm upgrade node
+Hint: kubeadm upgrade node config --kubelet-version v1.29.2 - to ONLY upgrade kubelet version
+5. apt-mark unhold kubelet kubectl && apt upgrade -y kubelet=1.29.0-1.1 kubectl=1.29.0-1.1
+6. kubeadm version && apt-mark hold kubelet kubectl
+7. systemctl daemon-reload && systemctl restart kubelet
+8. On the master node: kubectl uncordon node1
+
+Backup strategies:
+
+Option1:
+1. Via kube apiserver
+kubectl config view
+kubectl get all --all-namespaces -o yaml > all-deployment-services.yaml
+Hint: Only option for managed k8s cluster
+
+2. Use Velero tool (ARK) by HeptIO
+
+Option2:
+https://github.com/mmumshad/kubernetes-the-hard-way/blob/master/practice-questions-answers/cluster-maintenance/backup-etcd/etcd-backup-and-restore.md
+Backup of etcd:
+1. ETCD cluster backup instead ie. --data-dir=/var/lib/etcd - cluster state backup 
+ETCDCTL_API=3 etcdctl snapshot save /opt/snapshot-pre-boot.db \
+--endpoints=https://127.0.0.1:2379 \
+--cacert=/etc/kubernetes/pki/etcd/ca.crt \
+--cert=/etc/kubernetes/pki/etcd/server.crt \
+--key=/etc/kubernetes/pki/etcd/server.key
+2. Validate backup
+ETCDCTL_API=3 etcdctl snapshot status /opt/snapshot-pre-boot.db \
+--endpoints=https://127.0.0.1:2379 \
+--cacert=/etc/kubernetes/pki/etcd/ca.crt \
+--cert=/etc/kubernetes/pki/etcd/server.crt \
+--key=/etc/kubernetes/pki/etcd/server.key
+
+Restore of etcd:
+1. systemctl stop kube-apiserver or service kube-apiserver stop
+2. Restore from backup
+ETCDCTL_API=3 etcdctl snapshot restore /opt/snapshot-pre-boot.db \
+--data-dir /var/lib/etcd-from-backup \
+--endpoints=https://127.0.0.1:2379 \
+--cacert=/etc/kubernetes/pki/etcd/ca.crt \
+--cert=/etc/kubernetes/pki/etcd/server.crt \
+--key=/etc/kubernetes/pki/etcd/server.key
+
+ETCDCTL_API=3 etcdctl snapshot status /opt/snapshot-pre-boot.db \
+--endpoints=https://127.0.0.1:2379 \
+--cacert=/etc/kubernetes/pki/etcd/ca.crt \
+--cert=/etc/kubernetes/pki/etcd/server.crt \
+--key=/etc/kubernetes/pki/etcd/server.key
+3. Update etcd.service file to use --data-dir /var/lib/etcd-from-backup and also 
+path in hostPath named etdc-data, and mouthPath in volumeMounts section
+  volumes:
+  - hostPath:
+      path: /var/lib/etcd-from-backup  # update this line
+      type: DirectoryOrCreate
+    name: etcd-data
+  volumeMounts:
+  - mountPath: /var/lib/etcd-from-backup  # update to match 
+    name: etcd-data
+
+  Alternatively, if using external etcd, then use 
+  chown -R etcd:etcd /var/lib/etcd-data-new
+
+4. Start the kube-apiserver - auto restart with file update
+ systemctl start kube-apiserver or service kube-apiserver start
+
+ETCDCTL_API=3 etcdctl member list \
+--endpoints=https://127.0.0.1:2379 \
+--cacert=/etc/kubernetes/pki/etcd/ca.crt \
+--cert=/etc/kubernetes/pki/etcd/server.crt \
+--key=/etc/kubernetes/pki/etcd/server.key
+
+Authentication
+Who can access?
+https://kodekloud.com/topic/article-on-setting-up-basic-authentication-2/
+
+ - Files - username & password i.e. --basic-auth-file=cluster-users.csv as arg to kube-apiserver.service
+ - Files username and token i.e. --token-auth-file=cluster-token.csv as arg to kube-apiserver.service
+ curl -v -k https://master-node-ip:6443/api/v1/pods/ --header "Authorization: Bearer kpjCVbI7sbckc"
+ - certs
+ ssk key gen => ssh-keygen (id_rsa[padlock key] and id_rsa.pub[padlock])
+ 1. Keygen: openssl genrsa ca.key rsa - for web based asym keys
+ 2. CSR: openssl req -new -key ca.key -subj "/CN=KUBERNETES-CA" -out bayo.csr
+ 3. Sign Cert: openssl x509 -req -in ca.csr -signkey ca.key -out bayo.crt
+ 4. Repeat steps 1-3 for each component server and client certs with CN ie. "/CN=kubeadm/O=Devops-Group"
+ Hint: DevOps-Group will be given RBAC access i.e. with role-based authentication.
+ To use the certs: curl -v -k https://master-node-ip:6443/api/v1/pods/ -cert server.crt -key server.key -cacert ca.crt
+ or move the certs to kube-config.yaml and set KUBECONFIG directly
+
+Certificate matrix: https://github.com/mmumshad/kubernetes-the-hard-way/blob/master/tools/kubernetes-certs-checker.xlsx
+
+
+ If api-server or kubelet is down, do docker ps -a; docker logs <container-id> or crictl ps -a
+
+ Each component have:
+ root CA - root.crt & root.key
+ client - client.crt & client.key
+ server - server.crt & server.key
+
+ - External Authentication provider - LDAP
+ - Service Accounts (only accounts managed by k8s)
+
+Authorization
+ - RBAC Authorization
+ - ABAC Authorization
+ - Node Authorization
+ - Webhook Mode
+
+1. kube-apiserver - using TLS authentication
+apiserver(TLS) <---> controller-manager (TLS), kubelet (TLS), proxy (TLS), etcd cluster (TLS), and scheduler (TLS)
+
+To see api-groups and associated resoures:
+curl https://localhost:6443 -k --cert --cacert --key
+curl https://localhost:6443/apis -k
+
+Alternatively, to avoid passing certs to apiserver start a kubectl "proxy" client (proxy service) starts a proxy to bypass specify the certs directly
+It uses certs from your KUBECONFIG file to access the cluster. Users(bayo) => "kubectl proxy" => kube-apiserver
+kubectl proxy 
+curl https://127.0.0.1:8001 -k
+
+Authorization:
+1. Node Authorizer i.e. systems:nodes group for client => apiserver => kubelet i.e node status etc
+2. ABAC client => apiserver
+
+kubectl auth can-i create pods,deployments
+kubectl auth can-i delete services,configmap
+
+kubectl auth can-i create pods,deployments --as admin
+kubectl auth can-i delete services,configmap --as developer
+
+kubectl auth can-i delete services,configmap --as developer --namespace stage
+kubectl auth can-i list configmap,daemonsets --as developer --namespace tooling
+
+ServiceAccounts automatically generate a token objects i.e jenkins-sa ==> Generate token ==> token "secret" resource;
+secret is linked to the service account.
+
+Token is used by external accounts like jenkins, kubernetes-dashboard etc,
+but for internal accounts the token via secret (with annotation service-account.name: <sa-name>) is mounted as a volume within the pod.
+kubectl create sa dashboard-sa
+kubectl create token dashboard-sa
+
+Private registry
+1. docker login bayo-private-registry.io
+username/password
+2. docker run  bayo-private-registry.io/bayo-user/myapp-image:<tag>
+3. Create a secret of type docker-registry:
+kubectl create secret docker-registry regcred \
+ --docker-server=bayo-private-registry.io \
+ --docker-username=bayo-user \
+ --docker-password=bayo-password \
+ --docker-email=bayo.alege@rtx.com
+ 4. image: bayo-private-registry.io/myapp-image:<tag>
+  and add within template -> spec below:
+      imagePullSecrets:
+      - name: private-reg-cred
+
+docker run --cap-add MAC_ADMIN ubuntu
+
+or in pod definition:
+securityContext:
+   runAsUser: 1000
+   capabilities:
+      add: ["MAC_ADM"]
+
+
+kubens and kubectx
+sudo git clone https://github.com/ahmetb/kubectx /opt/kubectx
+sudo ln -s /opt/kubectx/kubectx /usr/local/bin/kubectx
+
+sudo git clone https://github.com/ahmetb/kubens /opt/kubens
+sudo ln -s /opt/kubectx/kubens /usr/local/bin/kubens
+
+Storage & Volume drivers
+file system on the container hosts:
+- In /var/lib/docker
+   - aufs
+   - containers
+   - image
+   - volumes
+
+docker volume create data_volume ie. ls /var/lib/docker/volumes/data_volume on docker host
+docker run -v data_volume:/var/lib/mysql mysql # volume mounting
+Hint: volume will be auto-created if it doesn't exists
+
+docker run -v  /data/mysql:/var/lib/mysql mysql # volume binding using directory mapping
+
+New way of mounting is given below:
+docker run --mount type=bind,source=/data/mysql,target=/var/lib/mysql mysql
+
+Hint: Docker uses layer architecture to achieve the mounting using storage drivers ie. aufs (default for ubuntu), zfs, BTRFS, Device Mapper, Overlay, Overlay2
+
+Volume Driver Plugins in Docker
+volumes are handled by volume driver plugins and not by storage drivers.
+volume drivers ie. local, Azure file storage, convey, flockerm gce-docker, glusterFS, netApp, RexRay, Portworx, VMWare vSphere storage
+docker run -it \ --name mysql --volume-driver rexray/ebs --mount src=ebs-vol,target=/var/lib/mysql
+
+nfs, ceph, scaleio, glusterfsm flocker etc as shared file system
+
+volumes: #on the host or AWS EFS within a POD
+- name: data-volume
+  awsElasticBlockStore:
+    volumeID: <volume-id>
+    fsType: ext4
+
+or
+
+  volumes:
+  - name: log-volume
+    hostPath: 
+      path: /var/log/webapp
+      type: Directory
+
+Better way is to use PV to carve out a small piece from it on as needed basis:
+PVC binding based on sufficient capacity, access modes, volume modes, storage class etc
+https://kodekloud.com/topic/using-pvc-in-pods/
+
+Static Storage
+1. Manual provision on GCP
+gcloud beta compute disks create --size 1GB --region us-east-1 pd-disk
+
+2. Add to PV as a claim
+gcePersistentDisk:
+   pdName: pd-disk
+   fsType: ext4
+
+Dynamic Provisioning via StorageClass Object
+1. Create StorageClass
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: google-storage
+privisioner: kubernetes.io/gce-pd
+
+2. Create PVC and reference the StorageClass Name
+Hint: NO NEED TO MANUALLY CREATE PV; it is automatically created for you by the storage class
+
+Network
+ON EVERY HOSTS
+1. How to assign nic interface on hosts:
+ip link; ip a s
+ip addr
+ip addr add 192.168.1.10/24 dev eth0
+route - to see the gateway (door) to other hosts
+YOU HAVE TO ADD DEFAULT GATEWAY TO OTHER NETWORKS 
+ie on hostA(192.168.1.10) add the default gateway to hostB(192.168.2.11) on another segment
+ip route add 192.168.2.0/24 via 192.168.1.1 
+ip route add default via 192.168.1.1 # any unknown routes
+
+And vice versa on hostB(192.168.2.11), to add hostA (192.168.1.10) route
+route or ip route
+ip route add 192.168.1.0/24 via 192.168.2.1 
+ip route add default via 192.168.2.1 # any unknown routes
+
+2. Router is assigned ip address on both network segments or networks
+switch #1(192.168.1.0/24)=> (192.168.1.1) Router (192.168.2.1) => switch Switch #2 (192.168.2.0/24)
+
+If ping doesn't work, check ip forward is ENABLED on hosts to forward traffic between its interfaces i.e. eth0 to eth1 or vice versa
+
+cat /proc/sys/net/ipv4/ip_forward or add in /etc/sysctl.conf to make permanant
+0 # is disabled, and 1 is enabled
+
+/etc/resolv.conf is a glorified centralized /etc/hosts mapping for all hosts
+nameserver 192.168.1.100
+search     mycompany.com bayo.mycompany.com
+
+nslookup DOESN'T CONSIDER /etc/hosts entry
+
+Network NS on Hosts
+ip netns add red
+ip netns add blue
+ip netns
+ip netns exec red ip link or ip -n red link
+connecting two network NS:
+ip link add veth-red type veth peer name veth-blue
+ip link set veth-blue netns blue
+ip link set veth-red netns red
+ip -n red addr add 192.168.15.1 dev veth-red
+ip -n blue addr add 192.168.16.1 dev veth-blue
+
+NETWORK BRIDGE  for VETH interfaces to talk
+ip link add v-net-0 type bridge
+ip link
+ip link set dev v-net-0 up
+
+ip -n red link del veth-red - remove the direct connection
+
+connect to bridge instead:
+ip link add veth-red type veth peer name veth-red-br
+ip link set veth-red netns red
+ip link set veth-red-br master v-net-0
+ip -n red addr add 192.168.15.1 dev veth-red
+ip -n red link set veth-red up
+ip addr add 192.168.15.5/24 dev v-net-0
+ip -n red ip route add 192.168.2.2/24 via 192.168.15.5
+ip -n red ip route add default via 192.168.15.5
+
+ip link add veth-blue type veth peer name veth-blue-br
+ip link set veth-blue netns blue
+ip link set veth-blue-br master v-net-0
+ip -n blue addr add 192.168.16.1 dev veth-blue
+ip -n blue link set veth-blue up
+ip addr add 192.168.16.5/24 dev v-net-0
+ip -n blue ip route add 192.168.1.2/24 via 192.168.16.5
+ip -n blue ip route add default via 192.168.16.5
+
+You also have to add NATing to the bridge bridge network on the host for ping to work from outside the host
+iptables -t nat -A POSTROUTING -s 192.168.15.0/23 -j MASQUERADE
+
+
+DOCKER BRIDGE
+docker network ls
+ip link
+ip addr
+
+CNI Supported plugins
+BRIDGE, VLAN, MACVLAN, IPVLAN, WINDOWS, DHCP, host-local 
+
+CNI takes care of these bridge network setup for us using
+add-ons like flannel, weaveworks, calico, nsx etc.
+
+Docker doesn't implement CNI but CNM instead (similar)
+https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+FOR EACH INTERFACE ON THE HOST, THERE MUST BE A ROUTE DEFINED and visible via ip route command
+
+ip address show type bridge
+
+THE CNI IS CONFIGURED IN THE KUBELET SERVICE manifest file arguments
+--cni-bin-dir, --cni-config-dir, --network-plugin=cni etc
+
+/etc/cni/net.d/10-bridge.conf
+ipam section defined the ip address assignment to use including range ie weavework is 10.32.0.0/12 between the nodes in the cluster
+10.32.0.1 > 10.47.255.254 - 1 million ip addresses
+
+
+THE PROXY-MODE IS SET WHILE CONFIGURING THE KUBE-PROXY SERVICE;
+it is iptable by default, but we can also use ipvs, userspace or iptables.
+Basically, when service endpoints are reached, it forwarded the traffic to the pod ip addresses
+Service IP range is different than pod IP range and NO RANGE OVERLAP ALLOWED.
+
+core DNS file: /etc/coredns/Corefile
+coreDNS service is KUBE-DNS
+
+LOAD BALANCER:
+When you set LoadBalancer as a Service -> k8s sends a request to GCP to provision a Network Load Balancer for the Service
+
+1. INGRESS CONTROLLERS - TRAEFIK< HAPROXY, NGINX, CONTOUR, GCP, ISTIO, etc
+2. INGRESS RESOURCE
+
+https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands#port-forward - command reference
+
+For INGRESS, use the  nginx.ingress.kubernetes.io/rewrite-target annotation to rewrite URL path
+
+CONTROLLER-MANAGER LEADER ELECTION
+kube-controller-manager --leader-elect true \
+  --leader-elect-lease-duration 15s \
+  --leader-elect-renew-deadline 10s \
+  --leader-elect-retry-period 2s
+
+  cat /etc/systemd/system/kube-apiserver.service
+  [Service]
+  --etcd-servers=https://10.240.0.10:2379,https://10.240.0.11:2379   ==> This is the external or internal ETCD SERVERS
+
+ETCD in HA
+Leader Election using RAFT protocol by sending out random timers to all the members and whoever finish the timer first
+send a respond to the other nodes to be the LEADER. Each member respond with their vote of acknowledgement.
+LEADER sends keepalive, I'm still the leader messages to other members until it is no longer and reelection happens.
+Quorum of 3 = 3/2 + 1 = 2.5 (whole number ONLY) ==> 2 for writing operations if 3 members
+
+Old number of controlplane/etcd servers nodes preferred for fault tolerance.
+wget -q --https-only \
+   "https://github.com/coreos/etcd/releases/download/v3.3.9/etcd-3.3.9-linux-amd64.tar.gz"
+tar --xvf etcd-3.3.9-linux-amd64.tar.gz
+mv etcd-3.3.9-linux-amd64/etcd* /usr/local/bin/
+mkdir -p /etc/etcd /var/lib/etcd
+cp ca.pem kubernetes-key.pem kubernetes.pem /etc/etcd/
+
+etcd.service
+--initial-cluster peer-1=https://${PEER1_IP}:2380,peer-2=https://${PEER2_IP}:2380  --- ETCD CLUSTER MEMBERS\
+
+export ETCDCTL_API=3
+
+etcdctl put name bayo
+etcdctl get name
+
+etcdctl get / -
+https://www.youtube.com/watch?v=uUupRagM7m0&list=PL2We04F3Y_41jYdadX55fdJplDvgNGENo -- MANUAL SETUP
+
+export INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="http2")].nodePort}')
+export SECURE_INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="https")].nodePort}')
+export TCP_INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="tcp")].nodePort}')
+export INGRESS_HOST=$(kubectl get po -l istio=ingressgateway -n istio-system -o jsonpath='{.items[0].status.hostIP}')
+
+curl -s -I -HHost:httpbin.example.com "http://$INGRESS_HOST:$INGRESS_PORT/status/200"
+
+
+while sleep 0.01; do curl -sS "http://$INGRESS_HOST:$INGRESS_PORT/productpage" &> /dev/null; done
+
+h2load -n1000 -c2 'http://'"$INGRESS_HOST"':'"$INGRESS_PORT"'/productpage' --- simulate 1000 requests and 2 clients connections

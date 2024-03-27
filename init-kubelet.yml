@@ -1,0 +1,102 @@
+apiVersion: kubeadm.k8s.io/v1beta3
+bootstrapTokens:
+- groups:
+  - system:bootstrappers:kubeadm:default-node-token
+  token: 9a08jv.c0izixklcxtmnze7
+  ttl: 24h0m0s
+  usages:
+  - signing
+  - authentication
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: 147.28.183.119
+nodeRegistration:
+  criSocket: unix:///run/containerd/containerd.sock
+  imagePullPolicy: IfNotPresent
+  name: k8s-server-01
+  taints:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+---
+apiServer:
+  timeoutForControlPlane: 4m0s
+apiVersion: kubeadm.k8s.io/v1beta3
+certificatesDir: /etc/kubernetes/pki
+clusterName: kubernetes
+controlPlaneEndpoint: 147.28.197.65:6443
+controllerManager: {}
+dns: {}
+etcd:
+  local:
+    dataDir: /var/lib/etcd
+imageRepository: k8s.gcr.io
+kind: ClusterConfiguration
+kubernetesVersion: v1.22.7
+networking:
+  dnsDomain: cluster.local
+  serviceSubnet:
+
+    sudo kubeadm init --control-plane-endpoint=147.75.53.58:6443 --upload-certs --pod-network-cidr=192.168.0.0/16 \
+    --apiserver-advertise-address=147.28.186.53
+
+   sudo kubeadm init --apiserver-advertise-address= --pod-network-cidr=
+   
+   sudo ip addr add 147.75.53.58 dev lo
+To make permanent, add to /etc/network/interfaces:
+
+cat >>/etc/network/interfaces <<EOF
+auto lo:0
+iface lo:0 inet static
+    address 147.75.53.58
+    netmask 255.255.255.255
+EOF
+
+====================================================
+
+{
+  "customer_ip": "10.70.249.7",
+  "customer_as": 65000,
+  "multihop": true,
+  "peer_ips": [
+    "169.254.255.1",
+    "169.254.255.2"
+  ],
+  "peer_as": 65530
+}
+root@k8s-server-01:~#
+{
+  "gateway": "10.70.249.6"
+}
+root@k8s-server-01:~#
+
+{
+  "customer_ip": "10.70.249.3",
+  "customer_as": 65000,
+  "multihop": true,
+  "peer_ips": [
+    "169.254.255.1",
+    "169.254.255.2"
+  ],
+  "peer_as": 65530
+}
+root@k8s-server-02:~#
+{
+  "gateway": "10.70.249.2"
+}
+root@k8s-server-02:~#
+
+{
+  "customer_ip": "10.70.249.1",
+  "customer_as": 65000,
+  "multihop": true,
+  "peer_ips": [
+    "169.254.255.1",
+    "169.254.255.2"
+  ],
+  "peer_as": 65530
+}
+root@k8s-server-03:~#
+{
+  "gateway": "10.70.249.0"
+}
+root@k8s-server-03:~#

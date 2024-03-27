@@ -2,6 +2,14 @@
 # Author: Bayo Alege
 # Purpose: Install k8s cluster
 
+# Check for exactly one argument (worker-node)
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <worker-node>"
+    exit 1
+fi
+
+worker_node=$1
+
 # Function to check and load kernel modules
 load_kernel_modules() {
     modprobe br_netfilter
@@ -97,8 +105,9 @@ enable_bridge_configurations() {
 
 # Function to install and initialize the Kubernetes cluster
 install_and_initialize_kubernetes() {
-        kubeadm join 10.70.249.3:6443 --token cfxb70.nfdm5gyx7y3arj85 \
+    sudo kubeadm join 10.70.249.3:6443 --token cfxb70.nfdm5gyx7y3arj85 \
         --discovery-token-ca-cert-hash sha256:6d20f676def20e31d6c33ee045b7ceefc1ffc6a9859c0a542b397b85718e9c73
+    sudo hostnamectl set-hostname "$1"
 }
 
 # Function to create k8s user and configure
@@ -115,5 +124,5 @@ install_and_configure_containerd
 install_kubernetes_packages
 disable_swap
 enable_bridge_configurations
-install_and_initialize_kubernetes
+install_and_initialize_kubernetes "$worker_node"
 create_k8s_user_and_configure
