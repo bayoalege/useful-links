@@ -1,0 +1,193 @@
+Encryption Setup for Prometheus Nodes and Prometheus Server Integration
+
+Generating and install node_exporter node:
+1. Generating Node Exporter TLS certificate 
+
+sudo openssl req -new -newkey rsa:2048 -days 730 -nodes -x509 -keyout node_exporter.key -out node_exporter.crt -subj "/C=US/ST=Massachusetts/L=Shrewsbury/O=Raybayo/CN=localhost" -addext "subjectAltName = DNS:localhost"
+
+2. Create a configmap resource
+
+cat config.yaml
+tls_server_config:
+   cert_file: /etc/node_exporter/node_exporter.crt
+   key_file: /etc/node_exporter/node_exporter.key
+
+3. Move certificate and config.yaml to /etc/node_exporter folder
+mv node_exporter.* /etc/node_exporter
+mv config.yaml /etc/node_exporter
+chown -R nodeusr:nodeusr /etc/node_exporter
+
+4. Add the --web.config to the /etc/systemd/system/node_exporter.service 
+--web.config=/etc/node_exporter/config.yaml
+
+5. Reload and restart the nodes
+systemctl daemon-reload
+systemctl restart node_exporter
+
+6. Validate with curl command
+curl https://localhost:9090/metrics
+
+curl -k https://localhost:9090/metrics
+Hint: Allow insecure self-signed certificates
+
+
+Prometheus Server TLS Config for the Node Above:
+1. Copy node_exporter.crt to Prometheus Server
+scp username:passwd@nodexyx:/etc/node_exporter/node_exporter.crt /etc/prometheus
+
+2. Change the cert permission:
+chown prometheus:prometheus  /etc/prometheus/node_exporter.crt
+
+3. Next update the /etc/prometheus/prometheus.yaml to use the copies TLS certificate
+scrape_configs:
+  - job_name: "nodes"
+    scheme: https   ===> because of TLS node_exporter certs
+    tls_config:
+      ca_file: /etc/prometheus/node_exporter.crt
+      insecure_skip_verify: true ===> to prevent self-signed cert
+    static_configs:
+      - targets: [ "192.168.1.178:9100" ]
+
+Authentication Setup for Prometheus Server and Node
+1. Install apache2-utils or httpd-tools
+sudo apt update
+sudo apt install apache2-utils -y
+
+2. Generate password for user
+htpasswd -nBC 12 ""|tr -d ":\n"
+
+3. Next, update the node /etc/node_exporter/config.yaml
+cat /etc/node_exporter/config.yaml
+
+tls_server_config:
+  cert_file: node_exporter.crt
+  key_file: node_exporter.key
+basic_auth_users:
+   prometheus: lls29hdjdkd <====== username: password
+
+Hint: Validate curl -u prometheus:secret-password http://node01:9100/metrics
+
+4. Finally, update the /etc/prometheus/prometheus.yaml file to use basic_auth
+- job_name: "node"
+  scheme: https
+  basic_auth:
+    username: prometheus
+    password: password (plain text)
+
+5. Restart prometheus to take effect
+systemctl restart prometheus
+
+Time Series
+- Unique combo of metric and label makes a time series i.e. 
+http_errors_total{instance="1.1.1.1:80", job="api", code="400", endpoint="/user", method="post"} 55234
+
+Metrics types: Counter, Gauge, Histogram (plot of resp or request size) & Summary (perc) 
+labels are key/value pairs
+
+Metrics examples: requests_total, and label can be path, app i.e. requests_total{path=/auth, app=k8smon} and sum{requests_total} for total requests counts
+All metrics have instance and job name labels in prometheus
+
+promtools
+- validate rules and prometheus.yml files
+- metrics passed for properly formatted
+- query prometheus server
+- debubbing & profiling prometheus
+- perform unit test against redcording/alerting
+
+i.e. promtool check config prometheus.yml - to prevent downtimes
+
+cAdvisor is used to collect metrics from containers while docker engine collects docker's metrics only.
+
+cat /etc/docker/daemon.json
+{
+  "metrics-addr" : "127.0.0.1:9323",
+  "experimental" : true
+}
+
+systemctl restart docker
+curl localhost:9323/metrics
+
+and add host to job on the prometheus server to take effect.
+
+Run cadivsor as a container in k8s cluster or use docker-compose i.e. 
+https://github.com/google/cadvisor
+sample:
+version: '3.4'
+services:
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor
+    container_name: cadvisor
+    privileged: true
+    devices:
+      - "/dev/kmsg:/dev/kmsg"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - 8070:8080
+
+docker compose up -d 
+
+check metrics: curl localhost:8070/metrics
+
+Add the following to premetheus.yml to collect cadvisor data
+scrape_configs:
+- job_name: "cAdvisor"
+  static_configs:
+    - targets: ["12.1.13.4:8080"]
+   
+
+In Query:
+engine_daemon_container_states_containers
+node_cpu_seconds_total
+sum by(instance) (node_cpu_seconds_total)
+sum by(instance, cpu) (node_cpu_seconds_total)
+sum without(mode, cpu) (node_cpu_seconds_total)
+node_memory_MemAvailable_bytes
+node_network_receive_bytes_total{instance="node02:9100",device="eth1"}
+node_network_receive_bytes_total{instance="node02:9100", device !="lo"}
+node_memory_MemAvailable_bytes{instance="node01:9100"}[5m] - past 5mins only
+node_memory_MemAvailable_bytes{instance="node01:9100"} offset 1h
+node_context_switches_total{instance="node02:9100"} @1654920221
+node_context_switches_total{instance="node01:9100"} @1654920221 offset 30m
+node_cpu_seconds_total{job="web",cpu="0", mode=~"user|system"}
+promQL is used to build alerting rules for notification in Dashboard
+promQL result can be string: string, scalar, instance vector ie.  node_cpu_seconds_total, and range vector ie node_cpu_seconds_total[30m]
+offset example node_cpu_seconds_total offset 10m
+offset modifier i.e. node_cpu_seconds_total @234535553
+
+ node_cpu_seconds_total{instance="node1"}[20m] @234535553 offset 10m
+nnode_memory_Active_bytes/1024 kb
+{instance="node1",job="node"} 2153168 kilobytes
+Hint: Metric name is dropped. No longer a metric.
+node_network_flags > 100
+node_network_receive_packets_total >= 220
+node_filesystem_avail_bytes
+node_filesystem_avail_bytes < bool 1000
+node_filesystem_avail_bytes > 1000 AND node_filesystem_avail_bytes < 3000
+
+node_filesystem_avail_bytes > 1000 unless node_filesystem_avail_bytes > 30000
+
+Logical operators - OR, AND, & UNLESS
+
+Vector Matching
+node_filesystem_avail_bytes/node_filesystem_size_bytes * 100
+{instance="node1",job="node",mountpoint="/home"} 50
+
+
+http_errors{method="get", code="500"}
+http_requests{method="post", code="500"}
+
+http_errors{code="500"}/ ignoring(code) http_requests{method="del"}
+or
+http_errors{code="500"}/ on(method) http_requests{method="del"}
+
+http_request
+
+sum by(path) (http_request)
+sum by(path, method) (http_request)
+sum by(instance, method) (http_request)
+sum without(path) (http_request)
